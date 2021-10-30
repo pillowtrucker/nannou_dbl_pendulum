@@ -1,13 +1,37 @@
-use nalgebra::{vector, Const, OVector};
-use nannou::prelude::*;
-use ode_solvers::{Rk4, System};
+use nannou::{prelude::*, ui::prelude::*};
+
+mod dbl_pendulum;
+
+use dbl_pendulum::{DoublePendulumState, DoublePendulumSystem};
+
+const LEN_SCALE: f64 = 100.;
+const WIDTH: u32 = 1024;
+const HEIGHT: u32 = 1024;
+
+widget_ids! {
+    struct Ids {
+        title,
+        g_label,
+        g,
+        m1_label,
+        m1,
+        m2_label,
+        m2,
+        l1_label,
+        l1,
+        l2_label,
+        l2,
+    }
+}
 
 struct Model {
     system: DoublePendulumSystem,
     state: DoublePendulumState,
+    main_window: WindowId,
+    ui: Ui,
+    ids: Ids,
 }
 
-const LEN_SCALE: f64 = 100.;
 impl Model {
     fn step(&mut self, t: f64) {
         self.state = self.system.step(self.state, t);
@@ -33,21 +57,47 @@ impl Model {
 }
 
 fn main() {
-    nannou::app(model)
-        .event(event)
-        .simple_window(view)
-        .update(update)
-        .run();
+    nannou::app(model).update(update).run();
 }
 
-fn model(_app: &App) -> Model {
+fn model(app: &App) -> Model {
+    let main_window = app
+        .new_window()
+        .title(app.exe_name().unwrap())
+        .size(WIDTH, HEIGHT)
+        .view(view)
+        .key_pressed(key_pressed)
+        .build()
+        .unwrap();
+
+    let ui_window = app
+        .new_window()
+        .title(app.exe_name().unwrap() + " controls")
+        .size(350, 400)
+        .view(ui_view)
+        .event(ui_event)
+        .key_pressed(key_pressed)
+        .build()
+        .unwrap();
+
+    let mut ui = app.new_ui().window(ui_window).build().unwrap();
+    let ids = Ids::new(ui.widget_id_generator());
+
+    ui.clear_with(color::DARK_CHARCOAL);
+    let mut theme = ui.theme_mut();
+    theme.label_color = color::WHITE;
+    theme.shape_color = color::CHARCOAL;
+
     Model {
         system: Default::default(),
         state: DoublePendulumState::new(2., 2., 0., 0.),
+        main_window,
+        ui,
+        ids,
     }
 }
 
-fn event(_app: &App, _model: &mut Model, _event: Event) {}
+fn key_pressed(_app: &App, _model: &mut Model, key: Key) {}
 
 fn update(_app: &App, model: &mut Model, update: Update) {
     model.step(update.since_last.as_secs_f64());
@@ -55,6 +105,10 @@ fn update(_app: &App, model: &mut Model, update: Update) {
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
+    fn mass_to_size(mass: f64) -> f32 {
+        10. + (mass as f32 - 1.) * 2.
+    }
+
     frame.clear(BLACK);
     let draw = app.draw();
     let top = model.top_pendulum_loc();
@@ -62,117 +116,111 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.translate(Vec3::new(0., 100., 0.));
     draw.line().x_y(0., 0.).end(-top).color(BLUE);
     draw.line().xy(-top).end(-btm).color(BLUE);
-    draw.ellipse().radius(10.).xy(-top).color(srgb(1., 0., 0.));
     draw.ellipse()
-        .radius(10.)
+        .radius(mass_to_size(model.system.m1))
+        .xy(-top)
+        .color(srgb(1., 0., 0.));
+    draw.ellipse()
+        .radius(mass_to_size(model.system.m2))
         .xy(-top - btm)
         .color(srgb(1., 0., 0.));
     draw.to_frame(app, &frame).unwrap();
 }
 
-#[derive(Debug, Copy, Clone)]
-struct DoublePendulumState {
-    // Top pendulum angle
-    θ1: f64,
-    // Lower pendulum angle
-    θ2: f64,
-    // Top pendulum angle change
-    ω1: f64,
-    // Lower pendulum angle change
-    ω2: f64,
-}
+fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
+    const LABEL_WIDTH: f64 = 175.;
+    let ui = &mut model.ui.set_widgets();
 
-impl DoublePendulumState {
-    fn new(θ1: f64, θ2: f64, ω1: f64, ω2: f64) -> Self {
-        Self { θ1, θ2, ω1, ω2 }
+    // Control panel title
+    widget::Text::new("Double Pendulum")
+        .top_left_with_margin(10.0)
+        .w_h(300.0, 40.0)
+        .font_size(24)
+        .set(model.ids.title, ui);
+
+    // Gravity label
+    widget::Text::new("Gravity")
+        .down_from(model.ids.title, 15.0)
+        .w_h(LABEL_WIDTH, 30.0)
+        .set(model.ids.g_label, ui);
+
+    // Gravity slider
+    for value in widget::Slider::new(model.system.g, 0.0, 20.0)
+        .right_from(model.ids.g_label, 10.0)
+        .w_h(150.0, 30.0)
+        .label(&format!("{:.4}", model.system.g))
+        .set(model.ids.g, ui)
+    {
+        model.system.g = value;
     }
-    fn as_mat(self) -> OVector<f64, Const<4>> {
-        vector![self.θ1, self.θ2, self.ω1, self.ω2]
+
+    // First pendulum mass label
+    widget::Text::new("Pendulum 1 mass")
+        .down_from(model.ids.g_label, 15.0)
+        .w_h(LABEL_WIDTH, 30.0)
+        .set(model.ids.m1_label, ui);
+
+    // First pendulum mass slider
+    for value in widget::Slider::new(model.system.m1, 0.1, 100.0)
+        .skew(8.)
+        .right_from(model.ids.m1_label, 10.0)
+        .w_h(150.0, 30.0)
+        .label(&format!("{:.4}", model.system.m1))
+        .set(model.ids.m1, ui)
+    {
+        model.system.m1 = value;
+    }
+
+    // First pendulum length label
+    widget::Text::new("Pendulum 1 length")
+        .down_from(model.ids.m1_label, 15.0)
+        .w_h(LABEL_WIDTH, 30.0)
+        .set(model.ids.l1_label, ui);
+
+    // First pendulum length slider
+    for value in widget::Slider::new(model.system.l1, 0.5, 5.0)
+        .right_from(model.ids.l1_label, 10.0)
+        .w_h(150.0, 30.0)
+        .label(&format!("{:.4}", model.system.l1))
+        .set(model.ids.l1, ui)
+    {
+        model.system.l1 = value;
+    }
+
+    // Second pendulum mass label
+    widget::Text::new("Pendulum 2 mass")
+        .down_from(model.ids.l1_label, 15.0)
+        .w_h(LABEL_WIDTH, 30.0)
+        .set(model.ids.m2_label, ui);
+
+    // First pendulum mass slider
+    for value in widget::Slider::new(model.system.m2, 0.1, 100.0)
+        .skew(10.)
+        .right_from(model.ids.m2_label, 10.0)
+        .w_h(150.0, 30.0)
+        .label(&format!("{:.4}", model.system.m2))
+        .set(model.ids.m2, ui)
+    {
+        model.system.m2 = value;
+    }
+
+    // Second pendulum length label
+    widget::Text::new("Pendulum 2 length")
+        .down_from(model.ids.m2_label, 15.0)
+        .w_h(LABEL_WIDTH, 30.0)
+        .set(model.ids.l2_label, ui);
+
+    // Second pendulum length slider
+    for value in widget::Slider::new(model.system.l2, 0.5, 5.0)
+        .right_from(model.ids.l2_label, 10.0)
+        .w_h(150.0, 30.0)
+        .label(&format!("{:.4}", model.system.l2))
+        .set(model.ids.l2, ui)
+    {
+        model.system.l2 = value;
     }
 }
 
-struct DoublePendulumSystem {
-    g: f64,
-    m1: f64,
-    m2: f64,
-    l1: f64,
-    l2: f64,
-}
-
-impl DoublePendulumSystem {
-    fn step(&self, state: DoublePendulumState, delta: f64) -> DoublePendulumState {
-        let mut solver = Rk4::new(self, 0., state.as_mat(), delta, delta);
-        solver.integrate().unwrap();
-        let out = solver.y_out();
-        let out = &out[out.len() - 1];
-        DoublePendulumState {
-            θ1: out.x,
-            θ2: out.y,
-            ω1: out.z,
-            ω2: out.w,
-        }
-    }
-}
-
-impl Default for DoublePendulumSystem {
-    fn default() -> Self {
-        DoublePendulumSystem {
-            g: 10.,
-            m1: 1.,
-            m2: 1.,
-            l1: 1.,
-            l2: 1.,
-        }
-    }
-}
-
-impl<'a> System<OVector<f64, Const<4>>> for &'a DoublePendulumSystem {
-    fn system(&self, _t: f64, y: &OVector<f64, Const<4>>, dy: &mut OVector<f64, Const<4>>) {
-        let (θ1, θ2, ω1, ω2) = (y.x, y.y, y.z, y.w);
-        let (θ1, θ2, ω1, ω2) = deriv(θ1, θ2, ω1, ω2, self.g, self.m1, self.m2, self.l1, self.l2);
-        dy.x = θ1;
-        dy.y = θ2;
-        dy.z = ω1;
-        dy.w = ω2;
-    }
-}
-
-/// Derivative for a pendulum system
-///
-/// Params:
-///  - θ1: angle of top pendulum,
-///  - θ2: angle of bottom pendulum,
-///  - ω1: velocity of angle of top pendulum,
-///  - ω2: velocity of angle of bottom pendulum,
-///  - g: strength of gravity,
-///  - m1: mass of top pendulum,
-///  - m2: mass of bottom pendulum,
-///  - l1: length of top pendulum,
-///  - l2: length of bottom pendulum,
-///
-/// output: θ'1, θ'2, ω'1, ω'2
-fn deriv(
-    θ1: f64,
-    θ2: f64,
-    ω1: f64,
-    ω2: f64,
-    g: f64,
-    m1: f64,
-    m2: f64,
-    l1: f64,
-    l2: f64,
-) -> (f64, f64, f64, f64) {
-    let dc = (θ1 - θ2).cos();
-    let ds = (θ1 - θ2).sin();
-    let tdc = (2. * (θ1 - θ2)).cos();
-    let num = -g * (2. * m1 + m2) * θ1.sin()
-        - m2 * g * (θ1 - 2. * θ2).sin()
-        - 2. * ds * m2 * (ω2 * ω2 * l2 + ω1 * ω1 * l1 * dc);
-    let denom = l1 * (2. * m1 + m2 - m2 * tdc);
-    let ωp1 = num / denom;
-    let num =
-        2. * ds * (ω1 * ω1 * l1 * (m1 + m2) + g * (m1 + m2) * θ1.cos() + ω2 * ω2 * l2 * m2 * dc);
-    let denom = l2 * (2. * m1 + m2 - m2 * tdc);
-    let ωp2 = num / denom;
-    (ω1, ω2, ωp1, ωp2)
+fn ui_view(app: &App, model: &Model, frame: Frame) {
+    model.ui.draw_to_frame_if_changed(app, &frame).unwrap();
 }
