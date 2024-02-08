@@ -1,5 +1,6 @@
-use nannou::{prelude::*, ui::prelude::*};
-
+use nannou::prelude::*;
+use nannou_conrod as ui;
+use ui::prelude::*;
 mod dbl_pendulum;
 
 use dbl_pendulum::{DoublePendulumState, DoublePendulumSystem};
@@ -80,7 +81,7 @@ fn model(app: &App) -> Model {
         .build()
         .unwrap();
 
-    let mut ui = app.new_ui().window(ui_window).build().unwrap();
+    let mut ui = ui::Builder::new(app).window(ui_window).build().unwrap();
     let ids = Ids::new(ui.widget_id_generator());
 
     ui.clear_with(color::DARK_CHARCOAL);
@@ -146,6 +147,7 @@ fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
 
     // Gravity slider
     for value in widget::Slider::new(model.system.g, 0.0, 20.0)
+        .enabled(true)
         .right_from(model.ids.g_label, 10.0)
         .w_h(150.0, 30.0)
         .label(&format!("{:.4}", model.system.g))
@@ -162,6 +164,7 @@ fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
 
     // First pendulum mass slider
     for value in widget::Slider::new(model.system.m1, 0.1, 100.0)
+        .enabled(true)
         .skew(8.)
         .right_from(model.ids.m1_label, 10.0)
         .w_h(150.0, 30.0)
@@ -179,6 +182,7 @@ fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
 
     // First pendulum length slider
     for value in widget::Slider::new(model.system.l1, 0.5, 5.0)
+        .enabled(true)
         .right_from(model.ids.l1_label, 10.0)
         .w_h(150.0, 30.0)
         .label(&format!("{:.4}", model.system.l1))
@@ -195,6 +199,7 @@ fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
 
     // First pendulum mass slider
     for value in widget::Slider::new(model.system.m2, 0.1, 100.0)
+        .enabled(true)
         .skew(10.)
         .right_from(model.ids.m2_label, 10.0)
         .w_h(150.0, 30.0)
@@ -212,6 +217,7 @@ fn ui_event(_app: &App, model: &mut Model, _event: WindowEvent) {
 
     // Second pendulum length slider
     for value in widget::Slider::new(model.system.l2, 0.5, 5.0)
+        .enabled(true)
         .right_from(model.ids.l2_label, 10.0)
         .w_h(150.0, 30.0)
         .label(&format!("{:.4}", model.system.l2))

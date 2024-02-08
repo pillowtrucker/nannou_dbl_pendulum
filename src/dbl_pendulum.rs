@@ -65,7 +65,7 @@ impl Default for DoublePendulumSystem {
     }
 }
 
-impl<'a> System<OVector<f64, Const<4>>> for &'a DoublePendulumSystem {
+impl<'a> System<f64, OVector<f64, Const<4>>> for &'a DoublePendulumSystem {
     fn system(&self, _t: f64, y: &OVector<f64, Const<4>>, dy: &mut OVector<f64, Const<4>>) {
         let (θ1, θ2, ω1, ω2) = (y.x, y.y, y.z, y.w);
         let (θ1, θ2, ω1, ω2) = deriv(θ1, θ2, ω1, ω2, self.g, self.m1, self.m2, self.l1, self.l2);
